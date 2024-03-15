@@ -15,8 +15,10 @@ public class BoidController : MonoBehaviour
     [SerializeField] private Vector3 velocity;
     [SerializeField] private Vector3 acceleration;
 
-
-    public float alignConstant = 1;
+    public float maxVelocity = 0.01f;
+    public float separationConstant = 1;
+    public float alignmentConstant = 1;
+    public float cohesionConstant = 1;
 
     // Start is called before the first frame update
     void Start()
@@ -49,14 +51,15 @@ public class BoidController : MonoBehaviour
     }
 
     // Update is called once per frame
-    void Update()
+    public void updateboid()
     {
+        velocity += acceleration;
+        velocity = Vector3.ClampMagnitude(velocity, maxVelocity);
+        
         // keep the position of the boid above the terrain
         this.gameObject.transform.position = new Vector3(transform.position.x, Terrain.activeTerrain.SampleHeight(transform.position) + 0.1f, transform.position.z);
-        velocity = Vector3.ClampMagnitude(velocity, 0.01f);
-        velocity += acceleration;
         this.gameObject.transform.position += velocity;
-        // acceleration = Vector3.zero;
+        acceleration = Vector3.zero;
     }
 
     // update neighboring boids
@@ -83,7 +86,24 @@ public class BoidController : MonoBehaviour
 
         drawLines();
     }
-    
+
+
+    // separate this entity with neighboring boids
+    public void separation()
+    {
+        Vector3 steering = Vector3.zero;
+        foreach (var boid in neighbors)
+        {
+            steering += (this.transform.position - boid.transform.position) / Vector3.Magnitude(this.transform.position - boid.transform.position);
+        }
+        if (neighbors.Length > 0)
+        {
+            steering /= neighbors.Length;
+        }
+        // steering = Vector3.ClampMagnitude(steering, separationConstant);
+        steering *= separationConstant;
+        this.acceleration += steering;
+    }
 
     // align this entity with neighboring boids
     public void alignment()
@@ -91,7 +111,6 @@ public class BoidController : MonoBehaviour
         Vector3 steering = Vector3.zero;
         foreach (var boid in neighbors)
         {
-            Debug.Log("This boid is in the radius! " + boid.gameObject.name + " by " + this.gameObject.name );
             steering += boid.velocity;
         }
         if (neighbors.Length > 0)
@@ -99,7 +118,8 @@ public class BoidController : MonoBehaviour
             steering /= neighbors.Length;
             steering -= this.velocity;
         }
-        steering = Vector3.ClampMagnitude(steering, alignConstant);
+        // steering = Vector3.ClampMagnitude(steering, alignmentConstant);
+        steering *= alignmentConstant;
         this.acceleration += steering;
     }
 
@@ -109,7 +129,6 @@ public class BoidController : MonoBehaviour
         Vector3 steering = Vector3.zero;
         foreach (var boid in neighbors)
         {
-            Debug.Log("This boid is in the radius! " + boid.gameObject.name + " by " + this.gameObject.name);
             steering += boid.transform.position;
         }
         if (neighbors.Length > 0)
@@ -117,7 +136,8 @@ public class BoidController : MonoBehaviour
             steering /= neighbors.Length;
             steering -= this.transform.position;
         }
-        steering = Vector3.ClampMagnitude(steering, alignConstant);
+        // steering = Vector3.ClampMagnitude(steering, cohesionConstant);
+        steering *= cohesionConstant;
         this.acceleration += steering;
     }
 

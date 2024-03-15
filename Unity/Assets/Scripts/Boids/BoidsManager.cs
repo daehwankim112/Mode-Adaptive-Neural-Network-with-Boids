@@ -8,13 +8,18 @@ public class BoidsManager : MonoBehaviour
 
     private BoidController[] floak;
     [SerializeField] private int numberOfBoids = 10;
-    [SerializeField] private float alignConstant = 1;
+    [SerializeField] private float separationConstant = 1;
+    [SerializeField] private float alignmentConstant = 1;
+    [SerializeField] private float cohesionConstant = 1;
     [SerializeField] private float neighborDistance = 1f;
+    [SerializeField] private float maxVelocity = 0.01f;
 
     // Start is called before the first frame update
     void Start()
     {
-        alignConstant /= 100;
+        separationConstant /= 100;
+        alignmentConstant /= 100;
+        cohesionConstant /= 100;
         floak = new BoidController[numberOfBoids];
         for (int i = 0; i < numberOfBoids; i++)
         {
@@ -22,7 +27,10 @@ public class BoidsManager : MonoBehaviour
             Vector2 tempRandomVector = Random.insideUnitCircle / 100f;
             BoidTemp.gameObject.name = "Boid" + i;
             BoidTemp.GetComponent<BoidController>().setAcceleration(new Vector3(tempRandomVector.x, 0f, tempRandomVector.y));
-            BoidTemp.GetComponent<BoidController>().alignConstant = this.alignConstant; 
+            BoidTemp.GetComponent<BoidController>().separationConstant = this.separationConstant; 
+            BoidTemp.GetComponent<BoidController>().alignmentConstant = this.alignmentConstant; 
+            BoidTemp.GetComponent<BoidController>().cohesionConstant = this.cohesionConstant; 
+            BoidTemp.GetComponent<BoidController>().maxVelocity = this.maxVelocity; 
             floak[i] = BoidTemp.GetComponent<BoidController>();
         }
     }
@@ -33,8 +41,10 @@ public class BoidsManager : MonoBehaviour
         for (int i = 0; i < numberOfBoids; i++)
         {
             floak[i].checkNeighbors(floak, neighborDistance);
-            // floak[i].alignment();
+            floak[i].alignment();
             floak[i].cohesion();
+            floak[i].separation();
+            floak[i].updateboid();
         }
 
     }
