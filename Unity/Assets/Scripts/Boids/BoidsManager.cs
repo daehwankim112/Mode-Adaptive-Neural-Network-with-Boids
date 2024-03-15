@@ -14,6 +14,9 @@ public class BoidsManager : MonoBehaviour
     [SerializeField] private float visualNeighborDistance = 2f;
     [SerializeField] private float protectedNeighborDistance = 1f;
     [SerializeField] private float fixedVelocity = 0.01f;
+    [SerializeField] private float edgeConstant = 2f;
+    [SerializeField] private float edgeBufferConstant = 18f;
+
 
     // Start is called before the first frame update
     void Start()
@@ -28,9 +31,6 @@ public class BoidsManager : MonoBehaviour
             Vector2 tempRandomVector = Random.insideUnitCircle / 100f;
             BoidTemp.gameObject.name = "Boid" + i;
             BoidTemp.GetComponent<BoidController>().setAcceleration(new Vector3(tempRandomVector.x, 0f, tempRandomVector.y));
-            BoidTemp.GetComponent<BoidController>().separationConstant = this.separationConstant; 
-            BoidTemp.GetComponent<BoidController>().alignmentConstant = this.alignmentConstant; 
-            BoidTemp.GetComponent<BoidController>().cohesionConstant = this.cohesionConstant; 
             BoidTemp.GetComponent<BoidController>().fixedVelocity = this.fixedVelocity; 
             floak[i] = BoidTemp.GetComponent<BoidController>();
         }
@@ -42,10 +42,11 @@ public class BoidsManager : MonoBehaviour
         for (int i = 0; i < numberOfBoids; i++)
         {
             floak[i].checkNeighbors(floak, visualNeighborDistance, protectedNeighborDistance);
-            floak[i].alignment();
-            floak[i].cohesion();
-            floak[i].separation();
+            floak[i].alignment(alignmentConstant);
+            floak[i].cohesion(cohesionConstant);
+            floak[i].separation(separationConstant);
             floak[i].updateboid();
+            floak[i].avoidWalls(edgeConstant, edgeBufferConstant);
         }
 
     }

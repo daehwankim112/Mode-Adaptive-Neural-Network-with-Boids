@@ -16,9 +16,6 @@ public class BoidController : MonoBehaviour
     [SerializeField] private Vector3 acceleration;
 
     public float fixedVelocity = 0.01f;
-    public float separationConstant = 1;
-    public float alignmentConstant = 1;
-    public float cohesionConstant = 1;
 
     // Start is called before the first frame update
     void Start()
@@ -55,7 +52,6 @@ public class BoidController : MonoBehaviour
     {
         velocity += acceleration;
         velocity = velocity.normalized * fixedVelocity;
-        // velocity = Vector3.ClampMagnitude(velocity, maxVelocity);
         
         // keep the position of the boid above the terrain
         this.gameObject.transform.position = new Vector3(transform.position.x, Terrain.activeTerrain.SampleHeight(transform.position) + 0.1f, transform.position.z);
@@ -108,8 +104,9 @@ public class BoidController : MonoBehaviour
     }
 
 
+
     // separate this entity with neighboring boids
-    public void separation()
+    public void separation(float separationConstant)
     {
         Vector3 steering = Vector3.zero;
         foreach (var boid in protectedNeighbors)
@@ -126,7 +123,7 @@ public class BoidController : MonoBehaviour
     }
 
     // align this entity with neighboring boids
-    public void alignment()
+    public void alignment(float alignmentConstant)
     {
         Vector3 steering = Vector3.zero;
         foreach (var boid in visualNeighbors)
@@ -144,7 +141,7 @@ public class BoidController : MonoBehaviour
     }
 
     // cohesion this entity with neighboring boids
-    public void cohesion()
+    public void cohesion(float cohesionConstant)
     {
         Vector3 steering = Vector3.zero;
         foreach (var boid in visualNeighbors)
@@ -159,6 +156,26 @@ public class BoidController : MonoBehaviour
         // steering = Vector3.ClampMagnitude(steering, cohesionConstant);
         steering *= cohesionConstant;
         this.acceleration += steering;
+    }
+
+    public void avoidWalls(float edgeConstant, float edgeBufferConstant)
+    {
+        if (transform.position.x < -edgeBufferConstant)
+        {
+            this.acceleration.x -= edgeConstant * fixedVelocity * (transform.position.x + edgeBufferConstant);
+        }
+        if (transform.position.x > edgeBufferConstant)
+        {
+            this.acceleration.x -= edgeConstant * fixedVelocity * (transform.position.x - edgeBufferConstant);
+        }
+        if (transform.position.z < -edgeBufferConstant)
+        {
+            this.acceleration.z -= edgeConstant * fixedVelocity * (transform.position.z + edgeBufferConstant);
+        }
+        if (transform.position.z > edgeBufferConstant)
+        {
+            this.acceleration.z -= edgeConstant * fixedVelocity * (transform.position.z - edgeBufferConstant);
+        }
     }
 
 
@@ -177,32 +194,5 @@ public class BoidController : MonoBehaviour
         {
             NeighborsLine.SetPositions(linePositions_v);
         }
-
-        /*
-        for (int i = 0; i < protectedNeighbors.Length * 2; i++)
-        {
-            if (protectedNeighbors.Length > 0)
-            {
-                gameObject.GetComponent<Material>().color = Color.red;
-            }
-            protectedNeighbors[i].GetComponent<Material>().color = Color.red;
-        }
-        */
-
-        // draw lines for protected neighbors
-        /*
-        Vector3[] linePositions_p = new Vector3[protectedNeighbors.Length * 2];
-        NeighborsLine.material = NeighborsLine.materials[1];
-        for (int i = 0; i < protectedNeighbors.Length * 2; i++)
-        {
-            linePositions_p[i] = protectedNeighbors[i / 2].gameObject.transform.position;
-            linePositions_p[++i] = this.transform.position;
-        }
-        NeighborsLine.positionCount = protectedNeighbors.Length * 2;
-        if (protectedNeighbors.Length > 0)
-        {
-            NeighborsLine.SetPositions(linePositions_p);
-        }
-        */
     }
 }
