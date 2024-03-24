@@ -11,13 +11,17 @@ namespace SIGGRAPH_2018 {
 	public class BioAnimation_Wolf : MonoBehaviour {
 
 		public bool Inspect = false;
+        public bool BoidsTarget = false;
+        public bool FollowBoidTarget = true;
+        public Transform BoidTarget;
+        public BoidsManager BoidsManager;
 
 		public bool ShowTrajectory = true;
 		public bool ShowVelocities = true;
 
 		public float TargetGain = 0.25f;
 		public float TargetDecay = 0.05f;
-		public bool TrajectoryControl = true;
+		public bool TrajectoryControl = false;
 		public float TrajectoryCorrection = 1f;
 
 		public Controller Controller;
@@ -78,7 +82,9 @@ namespace SIGGRAPH_2018 {
 			Ups = new Vector3[Actor.Bones.Length];
 			Velocities = new Vector3[Actor.Bones.Length];
 			Trajectory = new Trajectory(Points, Controller.GetNames(), transform.position, TargetDirection);
-			if(Controller.Styles.Length > 0) {
+            BoidsManager = GameObject.FindGameObjectWithTag("BoidsManager").GetComponent<BoidsManager>();
+
+            if (Controller.Styles.Length > 0) {
 				for(int i=0; i<Trajectory.Points.Length; i++) {
 					Trajectory.Points[i].Styles[0] = 1f;
 				}
@@ -153,6 +159,7 @@ namespace SIGGRAPH_2018 {
 			if(TrajectoryControl) {
 				PredictTrajectory();
 			}
+            
 
 			if(NN.Parameters != null) {
 				Animate();
@@ -168,108 +175,247 @@ namespace SIGGRAPH_2018 {
 			}
 		}
 
+        
+
+		
 		private void PredictTrajectory() {
-			//Query Control
-			float turn = Controller.QueryTurn();
-			Vector3 move = Controller.QueryMove();
-			float[] style = Controller.GetStyle();
-			bool control = turn != 0f || move.magnitude != 0f || style[1] != 0f;
 
-			//Intro Motion
-			if(Time.time < 1f) {
-				move = Vector3.forward;
-				turn = 0f;
-				style = new float[style.Length];
-				style[1] = 1f;
-				control = true;
-			}
+            if (FollowBoidTarget)
+            {
+                // BoidTarget = BoidsManager.floak[0].transform;
 
-			//Process Control
-			float curvature = Trajectory.GetCurvature(0, 111, 10);
-			float target = PoolBias();
-			float current = Trajectory.Points[RootPointIndex].GetVelocity().magnitude;
-			float bias = target;
-			if(turn == 0f) {
-				bias += PID.Update(Utility.Interpolate(target, current, curvature), current, 1f/Framerate);			
-			} else {
-				PID.Reset();
-			}
-			move = bias * move.normalized;
-			if(move.magnitude == 0f && turn != 0f) {
-				move = 2f/3f*Vector3.forward;
-			} else {
-				if(move.z == 0f && turn != 0f && !Input.GetKey(Controller.Styles[1].Multipliers[1].Key)) {
-					move = bias * new Vector3(move.x, 0f, 1f).normalized;
-				} else {
-					move = Vector3.Lerp(move, bias*Vector3.forward, Trajectory.Points[RootPointIndex].GetVelocity().magnitude / 6f);
-				}
-			}
-			if(style[2] == 0f) {
-				style[1] = Mathf.Max(style[1], Mathf.Pow(Mathf.Clamp(Trajectory.Points[RootPointIndex].GetVelocity().magnitude, 0f, 1f), 2f));
-				if(style[1] > 0f) {
-					move.z = Mathf.Max(move.z, 0.1f * style[1]);
-				}
-			} else {
-				move.z = bias;
-				move.x = 0f;
-				turn = 0f;
-				if(curvature > 0.25f) {
-					style[0] = 0f;
-					style[1] = 1f;
-					style[2] = 0f;
-					style[3] = 0f;
-					style[4] = 0f;
-					style[5] = 0f;
-				} else {
-					style[0] = 0f;
-					style[1] = Trajectory.Points[RootPointIndex].GetVelocity().magnitude < 0.5f ? 1f : 0f;
-					style[2] = Trajectory.Points[RootPointIndex].GetVelocity().magnitude < 0.5f ? 0f : 1f;
-					style[3] = 0f;
-					style[4] = 0f;
-					style[5] = 0f;
-				}
-			}
-			if(style[3] > 0f || style[4] > 0f || style[5] > 0f) {
-				bias = 0f;
-				if(Trajectory.Points[RootPointIndex].GetVelocity().magnitude > 0.5f) {
-					style[3] = 0f;
-					style[4] = 0f;
-					style[5] = 0f;
-				}
-			}
+                //Query Control
+                // float turn = Controller.BoidQueryTurn(BoidTarget);
+                float turn = Controller.BoidQueryTurn(BoidTarget.position - transform.position, Trajectory.Points[RootPointIndex].GetDirection());
+                Vector3 move = Controller.BoidQueryMove(BoidTarget.position, transform.position, Trajectory.Points[RootPointIndex].GetDirection());
+                float[] style = Controller.GetStyle();
+                bool control = turn != 0f || move.magnitude != 0f || style[1] != 0f;
 
-			//Update Target Direction / Velocity / Correction
-			TargetDirection = Vector3.Lerp(TargetDirection, Quaternion.AngleAxis(turn * 60f, Vector3.up) * Trajectory.Points[RootPointIndex].GetDirection(), control ? TargetGain : TargetDecay);
-			TargetVelocity = Vector3.Lerp(TargetVelocity, Quaternion.LookRotation(TargetDirection, Vector3.up) * move, control ? TargetGain : TargetDecay);
-			TrajectoryCorrection = Utility.Interpolate(TrajectoryCorrection, Mathf.Max(move.normalized.magnitude, Mathf.Abs(turn)), control ? TargetGain : TargetDecay);
+                //Intro Motion
+                if (Time.time < 1f)
+                {
+                    move = Vector3.zero;
+                    turn = 0f;
+                    style = new float[style.Length];
+                    style[1] = 1f;
+                    control = true;
+                }
 
-			//Predict Future Trajectory
-			Vector3[] trajectory_positions_blend = new Vector3[Trajectory.Points.Length];
-			trajectory_positions_blend[RootPointIndex] = Trajectory.Points[RootPointIndex].GetTransformation().GetPosition();
-			for(int i=RootPointIndex+1; i<Trajectory.Points.Length; i++) {
-				float bias_pos = 0.75f;
-				float bias_dir = 1.25f;
-				float bias_vel = 1.0f;
-				float weight = (float)(i - RootPointIndex) / (float)FuturePoints; //w between 1/FuturePoints and 1
-				float scale_pos = 1f - Mathf.Pow(1f - weight, bias_pos);
-				float scale_dir = 1f - Mathf.Pow(1f - weight, bias_dir);
-				float scale_vel = 1f - Mathf.Pow(1f - weight, bias_vel);
-				float scale = 1f / (Trajectory.Points.Length - (RootPointIndex + 1f));
-				trajectory_positions_blend[i] = trajectory_positions_blend[i-1] + Vector3.Lerp(Trajectory.Points[i].GetPosition() - Trajectory.Points[i-1].GetPosition(), scale * TargetVelocity, scale_pos);
-				Trajectory.Points[i].SetDirection(Vector3.Lerp(Trajectory.Points[i].GetDirection(), TargetDirection, scale_dir));
-				Trajectory.Points[i].SetVelocity(Vector3.Lerp(Trajectory.Points[i].GetVelocity(), TargetVelocity, scale_vel));
-			}
-			for(int i=RootPointIndex+1; i<Trajectory.Points.Length; i++) {
-				Trajectory.Points[i].SetPosition(trajectory_positions_blend[i]);
-			}
-			for(int i=RootPointIndex; i<Trajectory.Points.Length; i++) {
-				float weight = (float)(i - RootPointIndex) / (float)FuturePoints; //w between 0 and 1
-				for(int j=0; j<Trajectory.Points[i].Styles.Length; j++) {
-					Trajectory.Points[i].Styles[j] = Utility.Interpolate(Trajectory.Points[i].Styles[j], style[j], Utility.Normalise(weight, 0f, 1f, Controller.Styles[j].Transition, 1f));
-				}
-				Utility.Normalise(ref Trajectory.Points[i].Styles);
-				Trajectory.Points[i].SetSpeed(Utility.Interpolate(Trajectory.Points[i].GetSpeed(), TargetVelocity.magnitude, control ? TargetGain : TargetDecay));
-			}
+                //Process Control
+                float curvature = Trajectory.GetCurvature(0, 111, 10);
+                float target = PoolBias();
+                float current = Trajectory.Points[RootPointIndex].GetVelocity().magnitude;
+                float bias = target;
+                if (turn == 0f)
+                {
+                    bias += PID.Update(Utility.Interpolate(target, current, curvature), current, 1f / Framerate);
+                }
+                else
+                {
+                    PID.Reset();
+                }
+                // move += new Vector3(0, 0, 3);
+                // move = bias * move;
+                if (move.magnitude == 0f && turn != 0f)
+                {
+                    move = 2f / 3f * Vector3.forward;
+                }
+                else
+                {
+                    if (move.z == 0f && turn != 0f && !Input.GetKey(Controller.Styles[1].Multipliers[1].Key))
+                    {
+                        move = bias * new Vector3(move.x, 0f, 1f).normalized;
+                    }
+                    else
+                    {
+                        move = Vector3.Lerp(move, bias * Vector3.forward, Trajectory.Points[RootPointIndex].GetVelocity().magnitude / 6f);
+                    }
+                }
+                if (style[2] == 0f)
+                {
+                    style[1] = Mathf.Max(style[1], Mathf.Pow(Mathf.Clamp(Trajectory.Points[RootPointIndex].GetVelocity().magnitude, 0f, 1f), 2f));
+                    if (style[1] > 0f)
+                    {
+                        move.z = Mathf.Max(move.z, 0.1f * style[1]);
+                    }
+                }
+                else
+                {
+                    move.z = bias;
+                    move.x = 0f;
+                    turn = 0f;
+                    if (curvature > 0.25f)
+                    {
+                        style[0] = 0f;
+                        style[1] = 1f;
+                        style[2] = 0f;
+                        style[3] = 0f;
+                        style[4] = 0f;
+                        style[5] = 0f;
+                    }
+                    else
+                    {
+                        style[0] = 0f;
+                        style[1] = Trajectory.Points[RootPointIndex].GetVelocity().magnitude < 0.5f ? 1f : 0f;
+                        style[2] = Trajectory.Points[RootPointIndex].GetVelocity().magnitude < 0.5f ? 0f : 1f;
+                        style[3] = 0f;
+                        style[4] = 0f;
+                        style[5] = 0f;
+                    }
+                }
+                if (style[3] > 0f || style[4] > 0f || style[5] > 0f)
+                {
+                    bias = 0f;
+                    if (Trajectory.Points[RootPointIndex].GetVelocity().magnitude > 0.5f)
+                    {
+                        style[3] = 0f;
+                        style[4] = 0f;
+                        style[5] = 0f;
+                    }
+                }
+
+                //Update Target Direction / Velocity / Correction
+			    // TargetDirection = Vector3.Lerp(TargetDirection, Quaternion.AngleAxis(turn * 60f, Vector3.up) * Trajectory.Points[RootPointIndex].GetDirection(), control ? TargetGain : TargetDecay);
+                TargetDirection = Vector3.Lerp(TargetDirection, (BoidTarget.position - this.transform.position).normalized, control ? TargetGain : TargetDecay);
+                TargetVelocity = Vector3.Lerp(TargetVelocity, Quaternion.LookRotation(TargetDirection, Vector3.up) * move, control ? TargetGain : TargetDecay);
+                TrajectoryCorrection = Utility.Interpolate(TrajectoryCorrection, Mathf.Max(move.normalized.magnitude, Mathf.Abs(turn)), control ? TargetGain : TargetDecay);
+
+                //Predict Future Trajectory
+                Vector3[] trajectory_positions_blend = new Vector3[Trajectory.Points.Length];
+                trajectory_positions_blend[RootPointIndex] = Trajectory.Points[RootPointIndex].GetTransformation().GetPosition();
+                for (int i = RootPointIndex + 1; i < Trajectory.Points.Length; i++)
+                {
+                    float bias_pos = 0.75f;
+                    float bias_dir = 1.25f;
+                    float bias_vel = 1.0f;
+                    float weight = (float)(i - RootPointIndex) / (float)FuturePoints; //w between 1/FuturePoints and 1
+                    float scale_pos = 1f - Mathf.Pow(1f - weight, bias_pos);
+                    float scale_dir = 1f - Mathf.Pow(1f - weight, bias_dir);
+                    float scale_vel = 1f - Mathf.Pow(1f - weight, bias_vel);
+                    float scale = 1f / (Trajectory.Points.Length - (RootPointIndex + 1f));
+                    trajectory_positions_blend[i] = trajectory_positions_blend[i - 1] + Vector3.Lerp(Trajectory.Points[i].GetPosition() - Trajectory.Points[i - 1].GetPosition(), scale * TargetVelocity, scale_pos);
+                    Trajectory.Points[i].SetDirection(Vector3.Lerp(Trajectory.Points[i].GetDirection(), TargetDirection, scale_dir));
+                    Trajectory.Points[i].SetVelocity(Vector3.Lerp(Trajectory.Points[i].GetVelocity(), TargetVelocity, scale_vel));
+                }
+                for (int i = RootPointIndex + 1; i < Trajectory.Points.Length; i++)
+                {
+                    Trajectory.Points[i].SetPosition(trajectory_positions_blend[i]);
+                }
+                for (int i = RootPointIndex; i < Trajectory.Points.Length; i++)
+                {
+                    float weight = (float)(i - RootPointIndex) / (float)FuturePoints; //w between 0 and 1
+                    for (int j = 0; j < Trajectory.Points[i].Styles.Length; j++)
+                    {
+                        Trajectory.Points[i].Styles[j] = Utility.Interpolate(Trajectory.Points[i].Styles[j], style[j], Utility.Normalise(weight, 0f, 1f, Controller.Styles[j].Transition, 1f));
+                    }
+                    Utility.Normalise(ref Trajectory.Points[i].Styles);
+                    Trajectory.Points[i].SetSpeed(Utility.Interpolate(Trajectory.Points[i].GetSpeed(), TargetVelocity.magnitude, control ? TargetGain : TargetDecay));
+                }
+
+            } else
+            {
+                //Query Control
+                float turn = Controller.QueryTurn();
+                Vector3 move = Controller.QueryMove();
+                float[] style = Controller.GetStyle();
+                bool control = turn != 0f || move.magnitude != 0f || style[1] != 0f;
+
+			    //Intro Motion
+			    if(Time.time < 1f) {
+				    move =  Vector3.zero;
+				    turn = 0f;
+				    style = new float[style.Length];
+				    style[1] = 1f;
+				    control = true;
+			    }
+
+			    //Process Control
+			    float curvature = Trajectory.GetCurvature(0, 111, 10);
+			    float target = PoolBias();
+			    float current = Trajectory.Points[RootPointIndex].GetVelocity().magnitude;
+			    float bias = target;
+			    if(turn == 0f) {
+				    bias += PID.Update(Utility.Interpolate(target, current, curvature), current, 1f/Framerate);			
+			    } else {
+				    PID.Reset();
+			    }
+			    move = bias * move.normalized;
+			    if(move.magnitude == 0f && turn != 0f) {
+				    move = 2f/3f*Vector3.forward;
+			    } else {
+				    if(move.z == 0f && turn != 0f && !Input.GetKey(Controller.Styles[1].Multipliers[1].Key)) {
+					    move = bias * new Vector3(move.x, 0f, 1f).normalized;
+				    } else {
+					    move = Vector3.Lerp(move, bias*Vector3.forward, Trajectory.Points[RootPointIndex].GetVelocity().magnitude / 6f);
+				    }
+			    }
+			    if(style[2] == 0f) {
+				    style[1] = Mathf.Max(style[1], Mathf.Pow(Mathf.Clamp(Trajectory.Points[RootPointIndex].GetVelocity().magnitude, 0f, 1f), 2f));
+				    if(style[1] > 0f) {
+					    move.z = Mathf.Max(move.z, 0.1f * style[1]);
+				    }
+			    } else {
+				    move.z = bias;
+				    move.x = 0f;
+				    turn = 0f;
+				    if(curvature > 0.25f) {
+					    style[0] = 0f;
+					    style[1] = 1f;
+					    style[2] = 0f;
+					    style[3] = 0f;
+					    style[4] = 0f;
+					    style[5] = 0f;
+				    } else {
+					    style[0] = 0f;
+					    style[1] = Trajectory.Points[RootPointIndex].GetVelocity().magnitude < 0.5f ? 1f : 0f;
+					    style[2] = Trajectory.Points[RootPointIndex].GetVelocity().magnitude < 0.5f ? 0f : 1f;
+					    style[3] = 0f;
+					    style[4] = 0f;
+					    style[5] = 0f;
+				    }
+			    }
+			    if(style[3] > 0f || style[4] > 0f || style[5] > 0f) {
+				    bias = 0f;
+				    if(Trajectory.Points[RootPointIndex].GetVelocity().magnitude > 0.5f) {
+					    style[3] = 0f;
+					    style[4] = 0f;
+					    style[5] = 0f;
+				    }
+			    }
+
+			    //Update Target Direction / Velocity / Correction
+			    TargetDirection = Vector3.Lerp(TargetDirection, Quaternion.AngleAxis(turn * 60f, Vector3.up) * Trajectory.Points[RootPointIndex].GetDirection(), control ? TargetGain : TargetDecay);
+			    TargetVelocity = Vector3.Lerp(TargetVelocity, Quaternion.LookRotation(TargetDirection, Vector3.up) * move, control ? TargetGain : TargetDecay);
+			    TrajectoryCorrection = Utility.Interpolate(TrajectoryCorrection, Mathf.Max(move.normalized.magnitude, Mathf.Abs(turn)), control ? TargetGain : TargetDecay);
+
+			    //Predict Future Trajectory
+			    Vector3[] trajectory_positions_blend = new Vector3[Trajectory.Points.Length];
+			    trajectory_positions_blend[RootPointIndex] = Trajectory.Points[RootPointIndex].GetTransformation().GetPosition();
+			    for(int i=RootPointIndex+1; i<Trajectory.Points.Length; i++) {
+				    float bias_pos = 0.75f;
+				    float bias_dir = 1.25f;
+				    float bias_vel = 1.0f;
+				    float weight = (float)(i - RootPointIndex) / (float)FuturePoints; //w between 1/FuturePoints and 1
+				    float scale_pos = 1f - Mathf.Pow(1f - weight, bias_pos);
+				    float scale_dir = 1f - Mathf.Pow(1f - weight, bias_dir);
+				    float scale_vel = 1f - Mathf.Pow(1f - weight, bias_vel);
+				    float scale = 1f / (Trajectory.Points.Length - (RootPointIndex + 1f));
+				    trajectory_positions_blend[i] = trajectory_positions_blend[i-1] + Vector3.Lerp(Trajectory.Points[i].GetPosition() - Trajectory.Points[i-1].GetPosition(), scale * TargetVelocity, scale_pos);
+				    Trajectory.Points[i].SetDirection(Vector3.Lerp(Trajectory.Points[i].GetDirection(), TargetDirection, scale_dir));
+				    Trajectory.Points[i].SetVelocity(Vector3.Lerp(Trajectory.Points[i].GetVelocity(), TargetVelocity, scale_vel));
+			    }
+			    for(int i=RootPointIndex+1; i<Trajectory.Points.Length; i++) {
+				    Trajectory.Points[i].SetPosition(trajectory_positions_blend[i]);
+			    }
+			    for(int i=RootPointIndex; i<Trajectory.Points.Length; i++) {
+				    float weight = (float)(i - RootPointIndex) / (float)FuturePoints; //w between 0 and 1
+				    for(int j=0; j<Trajectory.Points[i].Styles.Length; j++) {
+					    Trajectory.Points[i].Styles[j] = Utility.Interpolate(Trajectory.Points[i].Styles[j], style[j], Utility.Normalise(weight, 0f, 1f, Controller.Styles[j].Transition, 1f));
+				    }
+				    Utility.Normalise(ref Trajectory.Points[i].Styles);
+				    Trajectory.Points[i].SetSpeed(Utility.Interpolate(Trajectory.Points[i].GetSpeed(), TargetVelocity.magnitude, control ? TargetGain : TargetDecay));
+			    }
+            }
 		}
 
 		private void Animate() {
@@ -477,7 +623,34 @@ namespace SIGGRAPH_2018 {
 			return bias;
 		}
 
-		private Trajectory.Point GetSample(int index) {
+        private float BoidPoolBias()
+        {
+            float[] styles = Trajectory.Points[RootPointIndex].Styles;
+            float bias = 0f;
+            for (int i = 0; i < styles.Length; i++)
+            {
+                float _bias = Controller.Styles[i].Bias;
+                float max = 0f;
+                for (int j = 0; j < Controller.Styles[i].Multipliers.Length; j++)
+                {
+                    if (Controller.Styles[i].Query() && Input.GetKey(Controller.Styles[i].Multipliers[j].Key))
+                    {
+                        max = Mathf.Max(max, Controller.Styles[i].Bias * Controller.Styles[i].Multipliers[j].Value);
+                    }
+                }
+                for (int j = 0; j < Controller.Styles[i].Multipliers.Length; j++)
+                {
+                    if (Controller.Styles[i].Query() && Input.GetKey(Controller.Styles[i].Multipliers[j].Key))
+                    {
+                        _bias = Mathf.Min(max, _bias * Controller.Styles[i].Multipliers[j].Value);
+                    }
+                }
+                bias += styles[i] * _bias;
+            }
+            return bias;
+        }
+
+        private Trajectory.Point GetSample(int index) {
 			return Trajectory.Points[Mathf.Clamp(index*10, 0, Trajectory.Points.Length-1)];
 		}
 
@@ -498,6 +671,7 @@ namespace SIGGRAPH_2018 {
 				return;
 			}
 
+            /*
 			UltiDraw.DrawGUITexture(new Vector2(0.5f, 0.05f), 0.03f, Disc, Input.GetKey(Controller.Forward) ? UltiDraw.Orange : UltiDraw.BlackGrey);
 			UltiDraw.DrawGUITexture(new Vector2(0.5f, 0.05f), 0.03f, Forward, UltiDraw.White);
 
@@ -514,7 +688,7 @@ namespace SIGGRAPH_2018 {
 			UltiDraw.DrawGUITexture(new Vector2(0.465f, 0.11f), 0.03f, Left, UltiDraw.White);
 
 			UltiDraw.DrawGUITexture(new Vector2(0.535f, 0.11f), 0.03f, Disc, Input.GetKey(Controller.Right) ? UltiDraw.Orange : UltiDraw.BlackGrey);
-			UltiDraw.DrawGUITexture(new Vector2(0.535f, 0.11f), 0.03f, Right, UltiDraw.White);
+			UltiDraw.DrawGUITexture(new Vector2(0.535f, 0.11f), 0.03f, Right, UltiDraw.White);*/    
 
 			FontStyle.fontSize = Mathf.RoundToInt(0.0125f * Screen.width);
 
@@ -618,27 +792,51 @@ namespace SIGGRAPH_2018 {
 				}
 			}
 
-			private void Inspector() {
-				Utility.SetGUIColor(UltiDraw.Grey);
-				using(new EditorGUILayout.VerticalScope ("Box")) {
-					Utility.ResetGUIColor();
+            private void Inspector()
+            {
+                Utility.SetGUIColor(UltiDraw.Grey);
+                using (new EditorGUILayout.VerticalScope("Box"))
+                {
+                    Utility.ResetGUIColor();
 
-					if(Utility.GUIButton("Animation", UltiDraw.DarkGrey, UltiDraw.White)) {
-						Target.Inspect = !Target.Inspect;
-					}
+                    if (Utility.GUIButton("Animation", UltiDraw.DarkGrey, UltiDraw.White))
+                    {
+                        Target.Inspect = !Target.Inspect;
+                    }
 
-					if(Target.Inspect) {
-						using(new EditorGUILayout.VerticalScope ("Box")) {
-							Target.ShowTrajectory = EditorGUILayout.Toggle("Show Trajectory", Target.ShowTrajectory);
-							Target.ShowVelocities = EditorGUILayout.Toggle("Show Velocities", Target.ShowVelocities);
-							Target.TargetGain = EditorGUILayout.Slider("Target Gain", Target.TargetGain, 0f, 1f);
-							Target.TargetDecay = EditorGUILayout.Slider("Target Decay", Target.TargetDecay, 0f, 1f);
-							Target.TrajectoryControl = EditorGUILayout.Toggle("Trajectory Control", Target.TrajectoryControl);
-							Target.TrajectoryCorrection = EditorGUILayout.Slider("Trajectory Correction", Target.TrajectoryCorrection, 0f, 1f);
-						}
-					}
-				}
-			}
+
+
+                    if (Target.Inspect)
+                    {
+                        using (new EditorGUILayout.VerticalScope("Box"))
+                        {
+                            Target.ShowTrajectory = EditorGUILayout.Toggle("Show Trajectory", Target.ShowTrajectory);
+                            Target.ShowVelocities = EditorGUILayout.Toggle("Show Velocities", Target.ShowVelocities);
+                            Target.TargetGain = EditorGUILayout.Slider("Target Gain", Target.TargetGain, 0f, 1f);
+                            Target.TargetDecay = EditorGUILayout.Slider("Target Decay", Target.TargetDecay, 0f, 1f);
+                            Target.TrajectoryControl = EditorGUILayout.Toggle("Trajectory Control", Target.TrajectoryControl);
+                            Target.TrajectoryCorrection = EditorGUILayout.Slider("Trajectory Correction", Target.TrajectoryCorrection, 0f, 1f);
+                        }
+                    }
+                }
+                using (new EditorGUILayout.VerticalScope("Box"))
+                {
+                    Utility.ResetGUIColor();
+
+                    if (Utility.GUIButton("Boids Target", UltiDraw.DarkGrey, UltiDraw.White))
+                    {
+                        Target.BoidsTarget = !Target.BoidsTarget;
+                    }
+
+                    if (Target.BoidsTarget)
+                    {
+                        using (new EditorGUILayout.VerticalScope("Box"))
+                        {
+                            Target.FollowBoidTarget = EditorGUILayout.Toggle("Toggle FollowBoidTarget", Target.FollowBoidTarget);
+                        }
+                    }
+                }
+            }
 		}
 		#endif
 	}

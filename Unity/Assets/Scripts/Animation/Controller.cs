@@ -8,12 +8,20 @@ public class Controller {
 
 	public bool Inspect = false;
 
-	public KeyCode Forward = KeyCode.W;
-	public KeyCode Back = KeyCode.S;
-	public KeyCode Left = KeyCode.A;
-	public KeyCode Right = KeyCode.D;
-	public KeyCode TurnLeft = KeyCode.Q;
-	public KeyCode TurnRight = KeyCode.E;
+    public KeyCode Forward = KeyCode.W;
+    public KeyCode Back = KeyCode.S;
+    public KeyCode Left = KeyCode.A;
+    public KeyCode Right = KeyCode.D;
+    public KeyCode TurnLeft = KeyCode.Q;
+    public KeyCode TurnRight = KeyCode.E;
+    public bool BoidForward = false;
+	public bool BoidBack = false;
+	public bool BoidLeft = false;
+	public bool BoidRight = false;
+	public bool BoidTurnLeft = false;
+	public bool BoidTurnRight = false;
+
+    public bool[] Anykey = new bool[7];
 
 	public Style[] Styles = new Style[0];
 
@@ -50,6 +58,19 @@ public class Controller {
 		return move;
 	}
 
+    public Vector3 BoidQueryMove(Vector3 TargetPosition, Vector3 CurrentPosition, Vector3 CurrentDirection)
+    {
+        float distance = (TargetPosition - CurrentPosition).magnitude;
+        Vector3 TargetDirection = TargetPosition - CurrentPosition;
+        Vector3 move = Vector3.zero;
+
+        move.z += distance;
+        move.x += Vector3.Cross(CurrentDirection, TargetPosition - CurrentPosition)[1] / (CurrentDirection.magnitude * TargetDirection.magnitude);
+        
+        return move;
+    }
+    
+
 	public float QueryTurn() {
 		float turn = 0f;
 		if(InputHandler.GetKey(TurnLeft)) {
@@ -60,6 +81,21 @@ public class Controller {
 		}
 		return turn;
 	}
+
+    public float BoidQueryTurn(Vector3 TargetTransform, Vector3 RootPointIndexDirection)
+    {
+        float turn = 0f;
+        if (BoidTurnLeft)
+        {
+            turn -= 1f;
+        }
+        if (BoidTurnRight)
+        {
+            turn += 1f;
+        }
+        return Vector3.Cross(TargetTransform, RootPointIndexDirection)[1];
+        return turn;
+    }
 
 	public void SetStyleCount(int count) {
 		count = Mathf.Max(count, 0);
@@ -117,7 +153,7 @@ public class Controller {
 			
 			bool active = false;
 
-			for(int i=0; i<Keys.Length; i++) {
+            for(int i=0; i<Keys.Length; i++) {
 				if(!Negations[i]) {
 					if(Keys[i] == KeyCode.None) {
 						if(!InputHandler.anyKey) {
@@ -131,24 +167,86 @@ public class Controller {
 				}
 			}
 
-			for(int i=0; i<Keys.Length; i++) {
-				if(Negations[i]) {
-					if(Keys[i] == KeyCode.None) {
-						if(!InputHandler.anyKey) {
-							active = false;
-						}
-					} else {
-						if(InputHandler.GetKey(Keys[i])) {
-							active = false;
-						}
-					}
-				}
-			}
+            for (int i = 0; i < Keys.Length; i++)
+            {
+                if (!Negations[i])
+                {
+                    if (Keys[i] == KeyCode.None)
+                    {
+                        if (!InputHandler.anyKey)
+                        {
+                            active = true;
+                        }
+                    }
+                    else
+                    {
+                        if (InputHandler.GetKey(Keys[i]))
+                        {
+                            active = true;
+                        }
+                    }
+                }
+            }
 
-			return active;
+            return active;
 		}
 
-		public void SetKeyCount(int count) {
+        public bool BoidQuery()
+        {
+            if (Keys.Length == 0)
+            {
+                return false;
+            }
+
+            bool active = false;
+
+            for (int i = 0; i < Keys.Length; i++)
+            {
+                if (!Negations[i])
+                {
+                    if (Keys[i] == KeyCode.None)
+                    {
+                        if (!InputHandler.anyKey)
+                        {
+                            active = true;
+                        }
+                    }
+                    else
+                    {
+                        if (InputHandler.GetKey(Keys[i]))
+                        {
+                            active = true;
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < Keys.Length; i++)
+            {
+                if (!Negations[i])
+                {
+                    if (Keys[i] == KeyCode.None)
+                    {
+                        if (!InputHandler.anyKey)
+                        {
+                            active = true;
+                        }
+                    }
+                    else
+                    {
+                        if (InputHandler.GetKey(Keys[i]))
+                        {
+                            active = true;
+                        }
+                    }
+                }
+            }
+
+            return active;
+        }
+
+
+        public void SetKeyCount(int count) {
 			count = Mathf.Max(count, 0);
 			if(Keys.Length != count) {
 				System.Array.Resize(ref Keys, count);
@@ -182,12 +280,12 @@ public class Controller {
 
 			if(Inspect) {
 				using(new EditorGUILayout.VerticalScope ("Box")) {
-					Forward = (KeyCode)EditorGUILayout.EnumPopup("Forward", Forward);
+					/*Forward = (KeyCode)EditorGUILayout.EnumPopup("Forward", Forward);
 					Back = (KeyCode)EditorGUILayout.EnumPopup("Backward", Back);
 					Left = (KeyCode)EditorGUILayout.EnumPopup("Left", Left);
 					Right = (KeyCode)EditorGUILayout.EnumPopup("Right", Right);
 					TurnLeft = (KeyCode)EditorGUILayout.EnumPopup("Turn Left", TurnLeft);
-					TurnRight = (KeyCode)EditorGUILayout.EnumPopup("Turn Right", TurnRight);
+					TurnRight = (KeyCode)EditorGUILayout.EnumPopup("Turn Right", TurnRight);*/
 					SetStyleCount(EditorGUILayout.IntField("Styles", Styles.Length));
 					for(int i=0; i<Styles.Length; i++) {
 						Utility.SetGUIColor(UltiDraw.Grey);
