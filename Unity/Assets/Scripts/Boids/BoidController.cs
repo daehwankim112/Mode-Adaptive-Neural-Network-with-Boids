@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using SIGGRAPH_2018;
 
 public class BoidController : MonoBehaviour
 {
@@ -12,8 +13,15 @@ public class BoidController : MonoBehaviour
     private BoidController[] protectedNeighbors;
     // private List<BoidController> neighbors = new List<BoidController>();
 
+    public BioAnimation_Wolf entity;
     [SerializeField] private Vector3 velocity;
     [SerializeField] private Vector3 acceleration;
+
+    // From BioAnimaiton_wolf class
+    [SerializeField] private Vector3 Positions;
+    [SerializeField] private Vector3 Velocities;
+
+
 
     public float fixedVelocity = 0.01f;
 
@@ -98,9 +106,25 @@ public class BoidController : MonoBehaviour
                 protectedNeighborIndex++;
             }
         }
+        BioAnimation_Wolf[] wolves = new BioAnimation_Wolf[visualNeighborIndex];
+
+        for (int i = 0; i < visualNeighborIndex; i++)
+        {
+            wolves[i] = visualNeighbors[i].entity;
+        }
+
+        entity.neighbors = wolves;
 
         // render lines
         drawLines();
+    }
+
+    public void synchronize(float synchronizationConstant, BioAnimation_Wolf wolf)
+    {
+        foreach (var NeighborEntity in visualNeighbors)
+        {
+            NeighborEntity.entity.SynchronizationConstant = synchronizationConstant;
+        }
     }
 
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DeepLearning;
 #if UNITY_EDITOR
 using UnityEditor;
+using UnityEngine.Profiling;
 #endif
 
 namespace SIGGRAPH_2018 {
@@ -23,12 +24,20 @@ namespace SIGGRAPH_2018 {
 		public float TargetDecay = 0.05f;
 		public bool TrajectoryControl = false;
 		public float TrajectoryCorrection = 1f;
+		public BioAnimation_Wolf[] neighbors;
+		public float SynchronizationConstant = 0f;
+		public Vector3[,] NeighboringPositions = new Vector3[0, 0];
+		public Vector3[,] NeighboringForwards = new Vector3[0, 0];
+		public Vector3[,] NeighboringUps = new Vector3[0, 0];
+		public Vector3[,] NeighboringVelocities = new Vector3[0, 0];
+		public Matrix4x4 currentRoot;
+
 
 		public Controller Controller;
 
 		private Actor Actor;
-		private MANN NN;
-		private Trajectory Trajectory;
+		public MANN NN;
+		public Trajectory Trajectory;
 
 		private Vector3 TargetDirection;
 		private Vector3 TargetVelocity;
@@ -157,12 +166,16 @@ namespace SIGGRAPH_2018 {
 			}
 
 			if(TrajectoryControl) {
+                Profiler.BeginSample("PredictTrajectory");
 				PredictTrajectory();
+                Profiler.EndSample();
 			}
             
 
 			if(NN.Parameters != null) {
+                Profiler.BeginSample("Animate");
 				Animate();
+                Profiler.EndSample();
 			}
 
 			if(MotionEditing != null) {
@@ -420,7 +433,7 @@ namespace SIGGRAPH_2018 {
 
 		private void Animate() {
 			//Calculate Root
-			Matrix4x4 currentRoot = Trajectory.Points[RootPointIndex].GetTransformation();
+			currentRoot = Trajectory.Points[RootPointIndex].GetTransformation();
 			currentRoot[1,3] = 0f; //For flat terrain
 
 			int start = 0;
@@ -464,6 +477,9 @@ namespace SIGGRAPH_2018 {
 				NN.SetInput(start + i*JointDimIn + 9, vel.x);
 				NN.SetInput(start + i*JointDimIn + 10, vel.y);
 				NN.SetInput(start + i*JointDimIn + 11, vel.z);
+
+
+
 			}
 			start += JointDimIn*Actor.Bones.Length;
 
@@ -592,13 +608,61 @@ namespace SIGGRAPH_2018 {
 				Velocities[i] = velocity;
 			}
 			start += JointDimOut*Actor.Bones.Length;
-			
+
+			//Synchronize Positions with Neighboring Entities
+			/*Vector3[] NeighboringPositionsMean = new Vector3[Actor.Bones.Length];
+			Array.Clear(NeighboringPositionsMean, 0, NeighboringPositionsMean.Length);
+
+			NeighboringPositions = new Vector3[neighbors.Length, Actor.Bones.Length];
+			Array.Clear(NeighboringPositions, 0, NeighboringPositions.Length);
+
+
+			for (int i = 0; i < neighbors.Length; i++)
+            {
+                for (int j = 0; j < Actor.Bones.Length; j++)
+                {
+					// NeighboringPositions[i] += neighbors[i].Positions[j];
+					// NeighboringPositions[i, j] = neighbors[i].transform.position.GetRelativePositionFrom(neighbors[i].Positions[j]);
+					NeighboringPositions[i, j] = neighbors[i].Positions[j].GetRelativePositionFrom(neighbors[i].currentRoot);
+				}
+				// NeighboringPositions +=  neighbors[i].Trajectory.Points[RootPointIndex].GetTransformation().GetPosition();
+
+			}
+
+            for (int i = 0; i < Actor.Bones.Length; i++)
+            {
+                for (int j = 0; j < neighbors.Length; j++)
+                {
+					NeighboringPositionsMean[i] += NeighboringPositions[j, i];
+                }
+            }
+
+            for (int i = 0; i < Actor.Bones.Length; i++)
+            {
+				NeighboringPositionsMean[i] /= neighbors.Length;
+            }*/
+
+
 			//Assign Posture
 			transform.position = nextRoot.GetPosition();
 			transform.rotation = nextRoot.GetRotation();
 			for(int i=0; i<Actor.Bones.Length; i++) {
+				/*if (neighbors.Length > 0)
+				{
+					// Actor.Bones[i].Transform.position = Vector3.Lerp(Positions[i], NeighboringPositionsMean, 0.5f);
+					Actor.Bones[i].Transform.position = Vector3.Lerp(Positions[i], NeighboringPositionsMean[i], 0.1f);
+					Debug.Log("Wolf name: " + this.gameObject.name + "number of neighbors: " + neighbors.Length);
+					
+					// Actor.Bones[i].Transform.position = Positions[i];
+				}
+				else
+				{
+					Actor.Bones[i].Transform.position = Positions[i];
+				}*/
 				Actor.Bones[i].Transform.position = Positions[i];
 				Actor.Bones[i].Transform.rotation = Quaternion.LookRotation(Forwards[i], Ups[i]);
+				// Debug.Log("Wolf name: " + this.gameObject.name + "Neighboring Position mean: " + "\n" + 
+				// "i: " + i + " value: " + NeighboringPositionsMean[i]);
 			}
 		}
 

@@ -17,6 +17,7 @@ public class BoidsManager : MonoBehaviour
     [SerializeField] private float separationConstant = 1;
     [SerializeField] private float alignmentConstant = 1;
     [SerializeField] private float cohesionConstant = 1;
+    [SerializeField] private float synchronizationConstant = 1;
     [SerializeField] private float visualNeighborDistance = 2f;
     [SerializeField] private float protectedNeighborDistance = 1f;
     [SerializeField] private float fixedVelocity = 0.01f;
@@ -48,6 +49,7 @@ public class BoidsManager : MonoBehaviour
             WolfTemp.GetComponent<BioAnimation_Wolf>().BoidTarget = BoidTemp.transform;
             WolfTemp.transform.parent = WolvesContainer.transform;
             Wolves[i] = WolfTemp.GetComponent<BioAnimation_Wolf>();
+            Floak[i].entity = Wolves[i];
         }
     }
 
@@ -60,6 +62,7 @@ public class BoidsManager : MonoBehaviour
             Floak[i].alignment(alignmentConstant);
             Floak[i].cohesion(cohesionConstant);
             Floak[i].separation(separationConstant);
+            Floak[i].synchronize(synchronizationConstant, Wolves[i]);
             Floak[i].updateboid();
             Floak[i].avoidWalls(edgeConstant, edgeBufferConstant);
 
